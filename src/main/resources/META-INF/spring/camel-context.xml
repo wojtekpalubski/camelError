@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns="http://www.springframework.org/schema/beans"
+       xsi:schemaLocation="
+	http://www.springframework.org/schema/beans
+	http://www.springframework.org/schema/beans/spring-beans.xsd
+	http://camel.apache.org/schema/spring
+	http://camel.apache.org/schema/spring/camel-spring.xsd"
+>
+    <bean class="pl.wpe.PlikWalidacjaProcesor"
+          id="PlikWalidacjaProcesor"/>
+    <bean class="pl.wpe.UzupelnijPlikProcesor"
+          id="UzupelnijPlikProcesor"/>
+
+    <camelContext id="CamelErrorContext" xmlns="http://camel.apache.org/schema/spring"
+                  errorHandlerRef="DeadLetterErrorhandler">
+
+        <errorHandler id="DeadLetterErrorhandler" type="DeadLetterChannel" deadLetterUri="file:dl"
+                      useOriginalMessage="true">
+            <redeliveryPolicy maximumRedeliveries="3" redeliveryDelay="250"
+                              retryAttemptedLogLevel="WARN"
+                              backOffMultiplier="2" useExponentialBackOff="true"/>
+        </errorHandler>
+
+        <errorHandler id="ZwyklyErrorhandler">
+            <redeliveryPolicy maximumRedeliveries="2" redeliveryDelay="1000"
+                              retryAttemptedLogLevel="WARN"/>
+        </errorHandler>
+
+        <route id="odczytPlikuRoute">
+            <from uri="file:we"></from>
+            <log message="Przenosze plik ${file:name}"/>
+            <log message="Uzupelniam plik ${file:name}"/>
+            <process ref="UzupelnijPlikProcesor"/>
+            <to uri="direct:walidacjaPliku"/>
+        </route>
+        <route id="walidacjaPlikuRoute" errorHandlerRef="DeadLetterErrorhandler">
+            <from uri="direct:walidacjaPliku"/>
+            <log message="Uzupelniam plik ${file:name}"/>
+            <process ref="UzupelnijPlikProcesor"/>
+            <log message="Waliduje plik ${file:name}"/>
+            <process ref="PlikWalidacjaProcesor"/>
+            <to uri="direct:zapisPliku"/>
+        </route>
+        <route id="zapisPlikuRoute">
+            <from uri="direct:zapisPliku"/>
+            <to uri="file:wy"/>
+        </route>
+    </camelContext>
+</beans>
