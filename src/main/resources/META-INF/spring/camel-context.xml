@@ -11,6 +11,10 @@
           id="PlikWalidacjaProcesor"/>
     <bean class="pl.wpe.UzupelnijPlikProcesor"
           id="UzupelnijPlikProcesor"/>
+    <bean class="pl.wpe.ZakonczRouteException"
+          id="ZakonczRouteException"/>
+    <bean class="pl.wpe.SplitAgregator"
+          id="SplitAgregator"/>
 
     <camelContext id="CamelErrorContext" xmlns="http://camel.apache.org/schema/spring"
                   errorHandlerRef="DeadLetterErrorhandler">
@@ -22,29 +26,72 @@
                               backOffMultiplier="2" useExponentialBackOff="true"/>
         </errorHandler>
 
-        <errorHandler id="ZwyklyErrorhandler">
+        <errorHandler id="ZwyklyErrorHandler">
             <redeliveryPolicy maximumRedeliveries="2" redeliveryDelay="1000"
                               retryAttemptedLogLevel="WARN"/>
         </errorHandler>
 
+        <onException>
+            <exception>java.lang.Exception</exception>
+            <handled>
+                <constant>true</constant>
+            </handled>
+            <!--<to uri="direct:obslugaBledu"/>-->
+            <to uri="log:przechwycono Exception"/>
+        </onException>
+        <onException>
+            <exception>pl.wpe.BlednyPlikException</exception>
+            <handled>
+                <constant>true</constant>
+            </handled>
+            <to uri="direct:obslugaBledu"/>
+        </onException>
+
+
         <route id="odczytPlikuRoute">
-            <from uri="file:we"></from>
+            <from uri="file:we?delay=10s"></from>
             <log message="Przenosze plik ${file:name}"/>
             <log message="Uzupelniam plik ${file:name}"/>
-            <process ref="UzupelnijPlikProcesor"/>
-            <to uri="direct:walidacjaPliku"/>
+            <!--<process ref="UzupelnijPlikProcesor"/>-->
+            <to uri="direct:splitPliku"/>
         </route>
-        <route id="walidacjaPlikuRoute" errorHandlerRef="DeadLetterErrorhandler">
+        <route id="walidacjaPlikuRoute" errorHandlerRef="ZwyklyErrorHandler">
             <from uri="direct:walidacjaPliku"/>
+            <log message="Przetwarzam ${body}"/>
             <log message="Uzupelniam plik ${file:name}"/>
             <process ref="UzupelnijPlikProcesor"/>
             <log message="Waliduje plik ${file:name}"/>
             <process ref="PlikWalidacjaProcesor"/>
             <to uri="direct:zapisPliku"/>
         </route>
+
+        <route id="splitPliku">
+            <from uri="direct:splitPliku"/>
+            <log message="splituje ${body}"/>
+            <split strategyRef="SplitAgregator">
+                <tokenize token="\n"/>
+                <log message="W splicie1: ${body}"/>
+                <setBody>
+                    <simple>${property.CamelSplitIndex},${property.CamelSplitSize} - ${body}</simple>
+                </setBody>
+                <process ref="UzupelnijPlikProcesor"/>
+                <log message="W splicie2: ${body}"/>
+            </split>
+
+            <log message="Body po splicie:\n ${body}"/>
+
+        </route>
+
         <route id="zapisPlikuRoute">
             <from uri="direct:zapisPliku"/>
             <to uri="file:wy"/>
+        </route>
+
+        <route id="obslugaBleduRoute">
+            <from uri="direct:obslugaBledu"/>
+            <log message="Obsluga bledu ${exception}"/>
+            <!--<throwException ref="Exception"/>-->
+            <to uri="file:blad"/>
         </route>
     </camelContext>
 </beans>
