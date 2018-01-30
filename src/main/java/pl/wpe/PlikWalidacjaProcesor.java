@@ -8,11 +8,11 @@ public class PlikWalidacjaProcesor implements Processor {
     Logger log = Logger.getLogger(PlikWalidacjaProcesor.class);
 
     public void process(Exchange exchange) throws Exception {
-        log.info("Start procesor");
+        log.info("Start walidator");
         String tresc = exchange.getIn().getBody(String.class);
         log.info("Plik: "+tresc);
         if (tresc.startsWith("blad")){
-            log.error("Plik bledny");
+            log.error("Plik bledny, rzucam wyjatek");
             throw new BlednyPlikException("Plik jest bledny");
         }
         else{

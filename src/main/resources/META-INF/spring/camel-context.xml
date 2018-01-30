@@ -21,7 +21,7 @@
 
         <errorHandler id="DeadLetterErrorhandler" type="DeadLetterChannel" deadLetterUri="file:dl"
                       useOriginalMessage="true">
-            <redeliveryPolicy maximumRedeliveries="3" redeliveryDelay="250"
+            <redeliveryPolicy maximumRedeliveries="3" redeliveryDelay="1000"
                               retryAttemptedLogLevel="WARN"
                               backOffMultiplier="2" useExponentialBackOff="true"/>
         </errorHandler>
@@ -31,30 +31,78 @@
                               retryAttemptedLogLevel="WARN"/>
         </errorHandler>
 
-        <onException>
-            <exception>java.lang.Exception</exception>
-            <handled>
-                <constant>true</constant>
-            </handled>
-            <!--<to uri="direct:obslugaBledu"/>-->
-            <to uri="log:przechwycono Exception"/>
-        </onException>
-        <onException>
-            <exception>pl.wpe.BlednyPlikException</exception>
-            <handled>
-                <constant>true</constant>
-            </handled>
-            <to uri="direct:obslugaBledu"/>
-        </onException>
+        <!--<onException>-->
+        <!--<exception>java.lang.Exception</exception>-->
+        <!--<handled>-->
+        <!--<constant>true</constant>-->
+        <!--</handled>-->
+        <!--&lt;!&ndash;<to uri="direct:obslugaBledu"/>&ndash;&gt;-->
+        <!--<to uri="log:przechwycono Exception"/>-->
+        <!--</onException>-->
 
+        <!--<onException>-->
+        <!--<exception>pl.wpe.BlednyPlikException</exception>-->
+        <!--<handled>-->
+        <!--<constant>false</constant>-->
+        <!--</handled>-->
+        <!--<log message="Obsluga bednego pliku w kontekscie"/>-->
+        <!--&lt;!&ndash;<to uri="direct:obslugaBledu"/>&ndash;&gt;-->
+        <!--</onException>-->
 
         <route id="odczytPlikuRoute">
-            <from uri="file:we?delay=10s"></from>
-            <log message="Przenosze plik ${file:name}"/>
-            <log message="Uzupelniam plik ${file:name}"/>
+            <from uri="file:we?delay=5s"></from>
+            <log message="Czytam plik: ${file:name}"/>
+            <!--<log message="Uzupelniam plik ${file:name}"/>-->
             <!--<process ref="UzupelnijPlikProcesor"/>-->
-            <to uri="direct:splitPliku"/>
+            <to uri="direct:bladSplit"/>
         </route>
+
+        <route>
+            <from uri="direct:prostyBlad"/>
+            <doTry>
+                <log message="proba"/>
+                <process ref="PlikWalidacjaProcesor"/>
+                <log message="proba ok"/>
+                <doCatch>
+                    <exception>java.lang.Exception</exception>
+                    <handled>
+                        <constant>false</constant>
+                    </handled>
+
+                    <log message="Przechwycone wyjatek procesora"/>
+                </doCatch>
+            </doTry>
+            <to uri="log:poBledzie"/>
+        </route>
+
+        <route id="bladSplit">
+            <from uri="direct:bladSplit"/>
+            <log message="splituje: ${body}"/>
+            <split strategyRef="SplitAgregator">
+                <tokenize token="\n"/>
+                <doTry>
+                    <log message="W splicie1: ${body}"/>
+                    <!--<setBody>-->
+                    <!--<simple>${property.CamelSplitIndex},${property.CamelSplitSize} - ${body}</simple>-->
+                    <!--</setBody>-->
+                    <process ref="PlikWalidacjaProcesor"/>
+                    <log message="W splicie2: ${body}"/>
+                    <doCatch>
+                        <exception>java.lang.Exception</exception>
+                        <handled>
+                            <constant>false</constant>
+                        </handled>
+
+                        <log message="Przechwycone wyjatek procesora w plicie: ${exception}"/>
+                    </doCatch>
+                </doTry>
+            </split>
+
+            <log message="Body po powrocie ze splitu:\n ${body}"/>
+
+        </route>
+
+
         <route id="walidacjaPlikuRoute" errorHandlerRef="ZwyklyErrorHandler">
             <from uri="direct:walidacjaPliku"/>
             <log message="Przetwarzam ${body}"/>
@@ -89,7 +137,7 @@
 
         <route id="obslugaBleduRoute">
             <from uri="direct:obslugaBledu"/>
-            <log message="Obsluga bledu ${exception}"/>
+            <log message="routa Obsluga bledu ${exception}"/>
             <!--<throwException ref="Exception"/>-->
             <to uri="file:blad"/>
         </route>
