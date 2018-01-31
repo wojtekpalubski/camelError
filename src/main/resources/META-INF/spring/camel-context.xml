@@ -21,7 +21,7 @@
 
         <errorHandler id="DeadLetterErrorhandler" type="DeadLetterChannel" deadLetterUri="file:dl"
                       useOriginalMessage="true">
-            <redeliveryPolicy maximumRedeliveries="3" redeliveryDelay="1000"
+            <redeliveryPolicy maximumRedeliveries="0" redeliveryDelay="1000"
                               retryAttemptedLogLevel="WARN"
                               backOffMultiplier="2" useExponentialBackOff="true"/>
         </errorHandler>
@@ -54,7 +54,7 @@
             <log message="Czytam plik: ${file:name}"/>
             <!--<log message="Uzupelniam plik ${file:name}"/>-->
             <!--<process ref="UzupelnijPlikProcesor"/>-->
-            <to uri="direct:bladSplit"/>
+            <to uri="direct:bladSplit2"/>
         </route>
 
         <route>
@@ -75,6 +75,40 @@
             <to uri="log:poBledzie"/>
         </route>
 
+        <route id="bladSplit2">
+            <from uri="direct:bladSplit2"/>
+            <log message="splituje: ${body}"/>
+                <doTry>
+            <split strategyRef="SplitAgregator" stopOnException="true">
+                <tokenize token="\n"/>
+                    <log message="W splicie1: ${body}"/>
+                    <!--<setBody>-->
+                    <!--<simple>${property.CamelSplitIndex},${property.CamelSplitSize} - ${body}</simple>-->
+                    <!--</setBody>-->
+                    <process ref="PlikWalidacjaProcesor"/>
+                    <log message="W splicie2: ${body}"/>
+            </split>
+                    <doCatch>
+                        <exception>pl.wpe.BlednyPlikException</exception>
+                        <handled>
+                            <constant>false</constant>
+                        </handled>
+                        <log message="Przechwycony BlednyPlikException z procesora w splicie: ${body} - ${exception}"/>
+                    </doCatch>
+                    <doCatch>
+                        <exception>java.lang.Exception</exception>
+                        <handled>
+                            <constant>false</constant>
+                        </handled>
+
+                        <log message="Przechwycony wyjatek procesora w splicie: ${body} - ${exception}"/>
+                    </doCatch>
+                </doTry>
+
+            <log message="Body po powrocie ze splitu:\n ${body}"/>
+
+        </route>
+
         <route id="bladSplit">
             <from uri="direct:bladSplit"/>
             <log message="splituje: ${body}"/>
@@ -93,7 +127,8 @@
                             <constant>false</constant>
                         </handled>
 
-                        <log message="Przechwycone wyjatek procesora w plicie: ${exception}"/>
+
+                        <log message="Przechwycony wyjatek procesora w splicie: ${exception}"/>
                     </doCatch>
                 </doTry>
             </split>

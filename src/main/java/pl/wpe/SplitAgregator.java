@@ -11,7 +11,7 @@ public class SplitAgregator implements AggregationStrategy {
             }
             String body = newExchange.getIn().getBody(String.class);
             String existing = oldExchange.getIn().getBody(String.class);
-            System.out.println("Agregator Do starego: "+existing+", dodaje nowe: "+body);
+            System.out.println("Agregator, do starego: "+existing+", dodaje nowe: "+body);
             oldExchange.getIn().setBody(existing + "\n" + body);
             return oldExchange;
         }
