@@ -15,6 +15,10 @@
           id="ZakonczRouteException"/>
     <bean class="pl.wpe.SplitAgregator"
           id="SplitAgregator"/>
+    <bean class="pl.wpe.WireTapBodyBean"
+          id="WireTapBodyBean"/>
+    <bean class="pl.wpe.WireTapeDiagnstykaBean"
+          id="WireTapeDiagnstykaBean"/>
 
     <camelContext id="CamelErrorContext" xmlns="http://camel.apache.org/schema/spring"
                   errorHandlerRef="DeadLetterErrorhandler">
@@ -103,7 +107,7 @@
         </route>
 
 
-        <route id="walidacjaPlikuRoute" errorHandlerRef="ZwyklyErrorHandler">
+        <route id="walidacjaPlikuRoute" errorHandlerRef="ZwyklyErrorHandler" autoStartup="false">
             <from uri="direct:walidacjaPliku"/>
             <log message="Przetwarzam ${body}"/>
             <log message="Uzupelniam plik ${file:name}"/>
@@ -140,6 +144,24 @@
             <log message="routa Obsluga bledu ${exception}"/>
             <!--<throwException ref="Exception"/>-->
             <to uri="file:blad"/>
+        </route>
+
+        <route id="WireTapBodyRoute" autoStartup="true">
+            <from uri="timer:przedWireTape?repeatCount=1"/>
+            <setHeader headerName="EPO_JAKIS_NAGLOWEK">
+                <constant>jakis naglowek</constant>
+            </setHeader>
+            <bean ref="WireTapBodyBean" method="utworzNowy(1,'komunikat')"/>
+            <to uri="log:przedWiretape?showAll=true"/>
+            <wireTap uri="direct:wireTapCopy" copy="true"/>
+            <to uri="log:poWiretape?showAll=true"/>
+        </route>
+        <route id="WireTapCopyRoute" autoStartup="true">
+            <from uri="direct:wireTapCopy"/>
+            <bean ref="WireTapBodyBean" method="utworzNowy(2,'zmienionyKomunikat')"/>
+            <to uri="log:wWiretape1?showAll=true"/>
+            <bean ref="WireTapeDiagnstykaBean" method="utworzKomunikatDiagnostyczny"/>
+            <to uri="log:wWiretape2?showAll=true"/>
         </route>
     </camelContext>
 </beans>
