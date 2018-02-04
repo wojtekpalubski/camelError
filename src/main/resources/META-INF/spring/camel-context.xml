@@ -19,6 +19,8 @@
           id="WireTapBodyBean"/>
     <bean class="pl.wpe.WireTapeDiagnstykaBean"
           id="WireTapeDiagnstykaBean"/>
+    <bean class="pl.wpe.ZglosWyjatekProcesor"
+          id="ZglosWyjatekProcesor"/>
 
     <camelContext id="CamelErrorContext" xmlns="http://camel.apache.org/schema/spring"
                   errorHandlerRef="DeadLetterErrorhandler">
@@ -35,6 +37,12 @@
                               retryAttemptedLogLevel="WARN"/>
         </errorHandler>
 
+        <errorHandler id="WireTapCopyErrorhandler" type="DeadLetterChannel" deadLetterUri="file:wiretapDLQ"
+                      useOriginalMessage="false">
+            <redeliveryPolicy maximumRedeliveries="10" redeliveryDelay="1000"
+                              retryAttemptedLogLevel="WARN"
+                              backOffMultiplier="2" useExponentialBackOff="true"/>
+        </errorHandler>
         <!--<onException>-->
         <!--<exception>java.lang.Exception</exception>-->
         <!--<handled>-->
@@ -82,32 +90,32 @@
         <route id="bladSplit2">
             <from uri="direct:bladSplit2"/>
             <log message="splituje: ${body}"/>
-                <doTry>
-            <split strategyRef="SplitAgregator" stopOnException="true">
-                <tokenize token="\n"/>
+            <doTry>
+                <split strategyRef="SplitAgregator" stopOnException="true">
+                    <tokenize token="\n"/>
                     <log message="W splicie1: ${body}"/>
                     <!--<setBody>-->
                     <!--<simple>${property.CamelSplitIndex},${property.CamelSplitSize} - ${body}</simple>-->
                     <!--</setBody>-->
                     <process ref="PlikWalidacjaProcesor"/>
                     <log message="W splicie2: ${body}"/>
-            </split>
-                    <doCatch>
-                        <exception>pl.wpe.BlednyPlikException</exception>
-                        <handled>
-                            <constant>false</constant>
-                        </handled>
-                        <log message="Przechwycony BlednyPlikException z procesora w splicie: ${body} - ${exception}"/>
-                    </doCatch>
-                    <doCatch>
-                        <exception>java.lang.Exception</exception>
-                        <handled>
-                            <constant>false</constant>
-                        </handled>
+                </split>
+                <doCatch>
+                    <exception>pl.wpe.BlednyPlikException</exception>
+                    <handled>
+                        <constant>false</constant>
+                    </handled>
+                    <log message="Przechwycony BlednyPlikException z procesora w splicie: ${body} - ${exception}"/>
+                </doCatch>
+                <doCatch>
+                    <exception>java.lang.Exception</exception>
+                    <handled>
+                        <constant>false</constant>
+                    </handled>
 
-                        <log message="Przechwycony wyjatek procesora w splicie: ${body} - ${exception}"/>
-                    </doCatch>
-                </doTry>
+                    <log message="Przechwycony wyjatek procesora w splicie: ${body} - ${exception}"/>
+                </doCatch>
+            </doTry>
 
             <log message="Body po powrocie ze splitu:\n ${body}"/>
 
@@ -190,13 +198,19 @@
             <to uri="log:przedWiretape?showAll=true"/>
             <wireTap uri="direct:wireTapCopy" copy="true"/>
             <to uri="log:poWiretape?showAll=true"/>
+            <log message="OK BODY koniec"/>
         </route>
-        <route id="WireTapCopyRoute" autoStartup="true">
+        <route id="WireTapCopyRoute" autoStartup="true" errorHandlerRef="WireTapCopyErrorhandler">
             <from uri="direct:wireTapCopy"/>
-            <bean ref="WireTapBodyBean" method="utworzNowy(2,'zmienionyKomunikat')"/>
             <to uri="log:wWiretape1?showAll=true"/>
-            <bean ref="WireTapeDiagnstykaBean" method="utworzKomunikatDiagnostyczny"/>
+            <bean ref="WireTapBodyBean" method="utworzNowy(2,'zmienionyKomunikat')"/>
             <to uri="log:wWiretape2?showAll=true"/>
+            <!--<process ref="ZglosWyjatekProcesor"/>-->
+            <to uri="log:wWiretape3?showAll=true"/>
+            <bean ref="WireTapeDiagnstykaBean" method="utworzKomunikatDiagnostyczny"/>
+            <to uri="log:wWiretape4?showAll=true"/>
+            <log message="OK DIAGNOSTYKA koniec"/>
         </route>
+
     </camelContext>
 </beans>
